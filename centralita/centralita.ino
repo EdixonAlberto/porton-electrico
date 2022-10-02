@@ -8,27 +8,32 @@
 #define OPEN 0
 #define STOP 1
 #define CLOSE 2
+#define MODE_DEBUG false
 
-bool advance = false;
+// VARIABLES____________________________________________________________________________________________________________
+volatile bool advance = false;
 volatile byte stateAction = STOP;
 unsigned long time = 0;
-unsigned long timeUpdated = 0;
+unsigned long timeWorkUpdated = 0;
+unsigned long timeActionUpdate = 0;
 bool isError = false;
 const int TIME_WORK = 5000;
-const int DELAY_WORK = 1000;
+const int DELAY_ACTION = 1000;
 
+// MAIN_________________________________________________________________________________________________________________
 void setup() {
   // CONFIG
   Serial.begin(9600);
   pinMode(PIN_COM, OUTPUT);
   pinMode(PIN_APRE, OUTPUT);
   pinMode(PIN_CHIUDE, OUTPUT);
+  pinMode(PIN_FCC, INPUT);
+  pinMode(PIN_FCA, INPUT);
   pinMode(PIN_CONTROL, INPUT);
 
-  // INITIAL
-  digitalWrite(PIN_COM, LOW);
-  digitalWrite(PIN_APRE, LOW);
-  digitalWrite(PIN_CHIUDE, LOW);
+  // START
+  NormalStop();
+  advance = digitalRead(PIN_FCA);
 
   // INTERRUPTS
   attachInterrupt(0, ChangeState, RISING);
@@ -40,8 +45,9 @@ void loop() {
   switch (stateAction) {
     case OPEN:
       if (!advance) {
-        delay(DELAY_WORK);
-        timeUpdated = time;
+        delay(DELAY_ACTION);
+        timeWorkUpdated = time;
+        Logger("OPENING");
       }
 
       time = millis();
@@ -49,29 +55,27 @@ void loop() {
 
       if (digitalRead(PIN_FCA)) {
         stateAction = STOP;
-        Serial.println("STOP");
+        Logger("STOP");
       } else {
         digitalWrite(PIN_COM, 1);
         digitalWrite(PIN_APRE, 1);
         digitalWrite(PIN_CHIUDE, 0);
-        Serial.println("OPENING");
       }
 
-      if (time > timeUpdated + TIME_WORK && !digitalRead(PIN_FCA)) {
+      if (time > timeWorkUpdated + TIME_WORK && !digitalRead(PIN_FCA)) {
         EmergencyStop();
       }
       break;
 
     case STOP:
-      digitalWrite(PIN_COM, 0);
-      digitalWrite(PIN_APRE, 0);
-      digitalWrite(PIN_CHIUDE, 0);
+      NormalStop();
       break;
 
     case CLOSE:
       if (advance) {
-        delay(DELAY_WORK);
-        timeUpdated = time;
+        delay(DELAY_ACTION);
+        timeWorkUpdated = time;
+        Logger("CLOSING");
       }
 
       time = millis();
@@ -79,39 +83,56 @@ void loop() {
 
       if (digitalRead(PIN_FCC)) {
         stateAction = STOP;
-        Serial.println("STOP");
+        Logger("STOP");
       } else {
         digitalWrite(PIN_COM, 1);
         digitalWrite(PIN_APRE, 0);
         digitalWrite(PIN_CHIUDE, 1);
-        Serial.println("CLOSING");
       }
 
-      if (time > timeUpdated + TIME_WORK && !digitalRead(PIN_FCC)) {
+      if (time > timeWorkUpdated + TIME_WORK && !digitalRead(PIN_FCC)) {
         EmergencyStop();
       }
       break;
   }
 }
 
+// METHODS______________________________________________________________________________________________________________
 void ChangeState() {
-  if (advance)
-    stateAction++;
-  else
-    stateAction--;
+  if (millis() > timeActionUpdate + 250) {
+    if (stateAction == STOP || millis() > timeActionUpdate + DELAY_ACTION) {
+      if (advance) {
+        stateAction++;
+      } else {
+        stateAction--;
+      }
 
-  if (stateAction == OPEN) Serial.println("OPEN");
-  if (stateAction == STOP) Serial.println("STOP");
-  if (stateAction == CLOSE) Serial.println("CLOSE");
+      if (MODE_DEBUG) {
+        if (stateAction == OPEN) Logger("OPEN");
+        if (stateAction == STOP) Logger("STOP");
+        if (stateAction == CLOSE) Logger("CLOSE");
+      }
+
+      timeActionUpdate = millis();
+    }
+  }
 }
 
 void EmergencyStop() {
+  noInterrupts();
+  NormalStop();
+  isError = true;
+  Logger("ERROR");
+}
+
+void NormalStop() {
   digitalWrite(PIN_COM, 0);
   digitalWrite(PIN_APRE, 0);
   digitalWrite(PIN_CHIUDE, 0);
-  isError = true;
-  stateAction = STOP;
-  time = 0;
-  timeUpdated = 0;
-  Serial.println("ERROR");
+}
+
+void Logger(String message) {
+  if (MODE_DEBUG) {
+    Serial.println(message);
+  }
 }
