@@ -17,8 +17,9 @@ unsigned long time = 0;
 unsigned long timeWorkUpdated = 0;
 unsigned long timeActionUpdate = 0;
 bool isError = false;
-const int TIME_WORK = 5000;
+const int TIME_WORK = 22000;
 const int DELAY_ACTION = 1000;
+const int DELAY_START = 1000;
 
 // MAIN_________________________________________________________________________________________________________________
 void setup() {
@@ -33,9 +34,6 @@ void setup() {
 
   // START
   NormalStop();
-  advance = digitalRead(PIN_FCA);
-
-  // INTERRUPTS
   attachInterrupt(0, ChangeState, RISING);
 }
 
@@ -54,17 +52,17 @@ void loop() {
       advance = true;
 
       if (digitalRead(PIN_FCA)) {
-        stateAction = STOP;
-        Logger("STOP");
-      } else {
         digitalWrite(PIN_COM, 1);
         digitalWrite(PIN_APRE, 1);
         digitalWrite(PIN_CHIUDE, 0);
+      } else {
+        stateAction = STOP;
+        Logger("STOP");
       }
 
-      if (time > timeWorkUpdated + TIME_WORK && !digitalRead(PIN_FCA)) {
-        EmergencyStop();
-      }
+      // if (time > timeWorkUpdated + TIME_WORK && digitalRead(PIN_FCA)) {
+      //   EmergencyStop();
+      // }
       break;
 
     case STOP:
@@ -82,25 +80,27 @@ void loop() {
       advance = false;
 
       if (digitalRead(PIN_FCC)) {
-        stateAction = STOP;
-        Logger("STOP");
-      } else {
         digitalWrite(PIN_COM, 1);
         digitalWrite(PIN_APRE, 0);
         digitalWrite(PIN_CHIUDE, 1);
+      } else {
+        stateAction = STOP;
+        Logger("STOP");
       }
 
-      if (time > timeWorkUpdated + TIME_WORK && !digitalRead(PIN_FCC)) {
-        EmergencyStop();
-      }
+      // if (time > timeWorkUpdated + TIME_WORK && digitalRead(PIN_FCC)) {
+      //   EmergencyStop();
+      // }
       break;
   }
 }
 
 // METHODS______________________________________________________________________________________________________________
 void ChangeState() {
-  if (millis() > timeActionUpdate + 250) {
-    if (stateAction == STOP || millis() > timeActionUpdate + DELAY_ACTION) {
+  if (millis() > DELAY_START && millis() > timeActionUpdate + 250) {
+    if (stateAction == STOP ||
+        millis() > timeActionUpdate + DELAY_ACTION + 250) {
+      Logger("INTERRUPT");
       if (advance) {
         stateAction++;
       } else {
