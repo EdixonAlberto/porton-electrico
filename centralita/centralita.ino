@@ -1,9 +1,11 @@
-#define PIN_COM 7     // Darlington out 3 (Comun)
-#define PIN_APRE 6    // Darlington out 2 (Apertura)
-#define PIN_CHIUDE 5  // Darlington out 1 (Cierre)
-#define PIN_FCC 9     // Final de carrera (Cierre)
-#define PIN_FCA 8     // Final de carrera (Apertura)
-#define PIN_CONTROL 4
+#include <Arduino.h>
+
+#define PIN_COM 5      // D1 - Darlington out 3 (Comun)
+#define PIN_APRE 4     // D2 - Darlington out 2 (Apertura)
+#define PIN_CHIUDE 14  // D5 - Darlington out 1 (Cierre)
+#define PIN_FCC 12     // D6 - Final de carrera (Cierre)
+#define PIN_FCA 16     // D8 - Final de carrera (Apertura)
+#define PIN_FTC 13     // D7 - Control por radio
 
 #define OPEN 0
 #define STOP 1
@@ -11,45 +13,69 @@
 #define MODE_DEBUG false
 
 // VARIABLES____________________________________________________________________________________________________________
-volatile bool advance = false;
-volatile byte stateAction = STOP;
-unsigned long time = 0;
-unsigned long timeWorkUpdated = 0;
-unsigned long timeActionUpdate = 0;
-bool isError = false;
-const int TIME_WORK = 22000;
-const int DELAY_ACTION = 1000;
+bool advance = false;
+byte stateAction = STOP;
+// unsigned long time = 0;
+// unsigned long timeWorkUpdated = 0;
+// unsigned long timeActionUpdate = 0;
+// bool isError = false;
+// const int TIME_WORK = 22000;
+const int DELAY_ACTION = 1500;
 const int DELAY_START = 1000;
 
 // MAIN_________________________________________________________________________________________________________________
 void setup() {
-  // CONFIG
-  Serial.begin(9600);
+  delay(DELAY_START);
+
+  // Setting
+  Serial.begin(115200);
   pinMode(PIN_COM, OUTPUT);
   pinMode(PIN_APRE, OUTPUT);
   pinMode(PIN_CHIUDE, OUTPUT);
   pinMode(PIN_FCC, INPUT);
   pinMode(PIN_FCA, INPUT);
-  pinMode(PIN_CONTROL, INPUT);
+  pinMode(PIN_FTC, INPUT);
 
-  // START
-  NormalStop();
-  attachInterrupt(0, ChangeState, RISING);
+  // Initialize
+  // attachInterrupt(PIN_FTC, ChangeState, RISING);
 }
 
 void loop() {
-  if (isError) return;
+  // if (isError) return;
+
+  if (digitalRead(PIN_FTC)) {
+    NormalStop();
+    Logger("INTERRUPT");
+
+    if (advance) {
+      stateAction++;
+    } else {
+      stateAction--;
+    }
+
+    if (MODE_DEBUG) {
+      if (stateAction == OPEN) Logger("OPEN");
+      if (stateAction == STOP) Logger("STOP");
+      if (stateAction == CLOSE) Logger("CLOSE");
+    }
+
+    delay(DELAY_ACTION);
+
+    while (digitalRead(PIN_FTC)) {
+      /* Esperar hasta que se deje de precionar el boton del control */
+      delay(100);
+    }
+  }
 
   switch (stateAction) {
     case OPEN:
       if (!advance) {
-        delay(DELAY_ACTION);
-        timeWorkUpdated = time;
+        // timeWorkUpdated = time;
         Logger("OPENING");
+        advance = true;
       }
 
-      time = millis();
-      advance = true;
+      // time = millis();
 
       if (digitalRead(PIN_FCA)) {
         digitalWrite(PIN_COM, 1);
@@ -71,13 +97,12 @@ void loop() {
 
     case CLOSE:
       if (advance) {
-        delay(DELAY_ACTION);
-        timeWorkUpdated = time;
+        // timeWorkUpdated = time;
         Logger("CLOSING");
+        advance = false;
       }
 
-      time = millis();
-      advance = false;
+      // time = millis();
 
       if (digitalRead(PIN_FCC)) {
         digitalWrite(PIN_COM, 1);
@@ -96,34 +121,32 @@ void loop() {
 }
 
 // METHODS______________________________________________________________________________________________________________
-void ChangeState() {
-  if (millis() > DELAY_START && millis() > timeActionUpdate + 250) {
-    if (stateAction == STOP ||
-        millis() > timeActionUpdate + DELAY_ACTION + 250) {
-      Logger("INTERRUPT");
-      if (advance) {
-        stateAction++;
-      } else {
-        stateAction--;
-      }
 
-      if (MODE_DEBUG) {
-        if (stateAction == OPEN) Logger("OPEN");
-        if (stateAction == STOP) Logger("STOP");
-        if (stateAction == CLOSE) Logger("CLOSE");
-      }
+// void ChangeState() {
+//   if (millis() > DELAY_START && millis() > timeActionUpdate + 2000) {
+//     timeActionUpdate = millis();
+//     Logger("INTERRUPT");
 
-      timeActionUpdate = millis();
-    }
-  }
-}
+//     if (advance) {
+//       stateAction++;
+//     } else {
+//       stateAction--;
+//     }
 
-void EmergencyStop() {
-  noInterrupts();
-  NormalStop();
-  isError = true;
-  Logger("ERROR");
-}
+//     if (MODE_DEBUG) {
+//       if (stateAction == OPEN) Logger("OPEN");
+//       if (stateAction == STOP) Logger("STOP");
+//       if (stateAction == CLOSE) Logger("CLOSE");
+//     }
+//   }
+// }
+
+// void EmergencyStop() {
+//   noInterrupts();
+//   NormalStop();
+//   isError = true;
+//   Logger("ERROR");
+// }
 
 void NormalStop() {
   digitalWrite(PIN_COM, 0);
